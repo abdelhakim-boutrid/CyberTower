@@ -44,13 +44,16 @@ class App:
     
     def update_Monsters(self):
         for Monster in self.attacker.monsters:
-            Monster.update()
+            if Monster.hp<0 :
+                self.attacker.monsters.remove(Monster)
+            else :
+                Monster.update(self.attacker,self.defenser)
 
     def update_Towers(self):
         for towr in self.defenser.towers:
-            towr.update()
+            towr.update(self.attacker.monsters)
         #Spawning towers!
-        self.defenser.tick+=10
+        self.defenser.tick+=1
         if self.defenser.tick == 300:
             v2,v1,v3 =monster_list[firewall]
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[7]))
@@ -59,13 +62,13 @@ class App:
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[5]))
         if self.defenser.tick == 900:
             v2,v1,v3 =monster_list[ruler]
-            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[3]))
+            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[3],16))
         if self.defenser.tick == 1200:
             v2,v1,v3 =monster_list[firewall]
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[8]))
         if self.defenser.tick == 1500:
             v2,v1,v3 =monster_list[ruler]
-            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[9]))
+            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[9],16))
         if self.defenser.tick == 1800:
             v2,v1,v3 =monster_list[firewall]
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[2]))
@@ -77,10 +80,10 @@ class App:
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[1]))
         if self.defenser.tick == 2700:
             v2,v1,v3 =monster_list[ruler]
-            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[0]))
+            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[0],16))
         if self.defenser.tick == 3000:
             v2,v1,v3 =monster_list[ruler]
-            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[6]))
+            self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[6],16))
         
 
     def draw(self):
@@ -115,19 +118,19 @@ class App:
                     self.attacker.money-=8
                     self.buying=[3,120]
                     v2, v1, v3 = monster_list[phising]
-                    self.attacker.monsters.append(monster(v1,v2,v3,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,50,spawnpoint))
             if pyxel.mouse_y < 24 and pyxel.mouse_y > 16 and pyxel.mouse_x < 64:
                 if self.attacker.money > 10:
                     self.attacker.money-=10
                     self.buying=[2,120]
                     v2, v1, v3 = monster_list[DOS]
-                    self.attacker.monsters.append(monster(v1,v2,v3,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,100,spawnpoint))
             if pyxel.mouse_y < 16 and pyxel.mouse_y > 8 and pyxel.mouse_x < 64:
                 if self.attacker.money > 5:
                     self.attacker.money-=5
                     self.buying=[1,120]
                     v2, v1, v3 = monster_list[voicephising]
-                    self.attacker.monsters.append(monster(v1,v2,v3,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,150,spawnpoint))
         
         pyxel.text(66,4,self.defenser.__str__(),3)
         pyxel.text(66,14,self.attacker.__str__(),3)
@@ -162,18 +165,24 @@ class Defense:
         return f"Enemy Health Point : {self.hp}"
 
 class tower:
-    def __init__(self,d,n,s,pos):
+    def __init__(self,d,n,s,pos,dist=32):
         self.damage=d
         self.name=n
         self.sprite=s
+        self.mdist=dist
         self.posx=pos[0]
         self.posy=pos[1]
 
-    def update(self,*args):
-        pass
+    def update(self,monsters,*args):
+        for monst in monsters:
+            if self.dist(monst)< self.mdist:
+                monst.hp-=self.damage
 
     def draw(self,*args):
         pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3])
+    
+    def dist(self,m):
+        return ((self.posx-m.posx)**2+(self.posy-m.posy))**0.5
 
         
 class Attack:
@@ -188,16 +197,48 @@ class Attack:
         return f"Money : {round(self.money,2)}"
 
 class monster:
-    def __init__(self,d,n,s,pos):
+    def __init__(self,d,n,s,hp,pos):
         self.damage=d
+        self.hp =50
         self.name=n
         self.sprite=s
         self.posx=pos[0]
         self.posy=pos[1]
-        self.time=0
+        self.turn=0
     
-    def update(self,*args):
-        pass
+    def update(self,attack,defense,*args):
+        match self.turn:
+            case 0:
+                self.posy+=1
+                if self.posy==100:
+                    self.turn+=1
+            case 2:
+                self.posy+=1
+                if self.posy==200:
+                    self.turn+=1
+            case 1:
+                self.posx+=1
+                if self.posx==50:
+                    self.turn+=1
+            case 3:
+                self.posx+=1
+                if self.posx==130:
+                    self.turn+=1
+            case 5:
+                self.posx+=1
+                if self.posx==200:
+                    self.turn+=1
+            case 4:
+                self.posy-=1
+                if self.posy==100:
+                    self.turn+=1
+            case 6:
+                self.posy-=1
+                if self.posy==50:
+                    defense.take_damage(self.damage)
+                    attack.monsters.remove(self)
+
+
         
     def draw(self,*args):
         pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3])
