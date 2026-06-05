@@ -15,10 +15,10 @@ DOS =12
 voicephising = 13
 
 monster_list={#[Name, damage, sprite(posx,posy,sizex,sizey)]
-    firewall:["Firewall",2,(0,0,16,16)],
-    ruler:["Rules",1,(0,0,16,16)],
+    firewall:["Firewall",2,(0,16,16,16)],
+    ruler:["Rules",1,(32,0,16,16)],
     phising:["Phising",1,(0,0,16,16)],
-    DOS:["DoS",4,(0,0,16,16)],
+    DOS:["DoS",4,(48,0,16,16)],
     voicephising:["Voice-Phising",2,(0,0,16,16)]
 }
 
@@ -27,7 +27,7 @@ class App:
     def __init__(self):
         pyxel.init(256, 256, title="Nuit du Code")
         self.buying=[-1,0] # buy nb, time_left
-        pyxel.load("theme.pyxres")
+        pyxel.load("theme2.pyxres")
         pyxel.sounds[0].pcm("assets/audio_bgm1.ogg")
         pyxel.mouse(True)
         self.attacker = Attack()
