@@ -4,7 +4,7 @@ top_left  = (0,32)
 top_right = (pyxel.width, 32)
 tm = 0 #Tilemap( 0 - 7 )
 Image=0
-spawnpoint = (50,40)
+spawnpoint = (8,32)
 
 #class TowerType(enumerate):
 firewall = 1
@@ -12,14 +12,14 @@ ruler = 2
 packet_filter = 3
 phising = 11
 DOS =12
-voicephising = 13
+trojan= 13
 
 monster_list={#[Name, damage, sprite(posx,posy,sizex,sizey)]
     firewall:["Firewall",2,(0,16,16,16)],
     ruler:["Rules",1,(32,0,16,16)],
     phising:["Phising",1,(0,0,16,16)],
     DOS:["DoS",4,(48,0,16,16)],
-    voicephising:["Voice-Phising",2,(0,0,16,16)]
+    trojan:["Trojan",2,(0,0,16,16)]
 }
 
 class App:
@@ -101,9 +101,9 @@ class App:
         else :
             pyxel.text(8,16,"DOS (10)",1)
         if self.buying[0]==3:
-            pyxel.text(8,24,"voice-fish(8)",2)
+            pyxel.text(8,24,"Trojan (8)",2)
         else :
-            pyxel.text(8,24,"voice-fish(8)",1)
+            pyxel.text(8,24,"Trojan (8)",1)
         if self.buying[0]!=-1 :
             self.buying[1]-=1
         if self.buying[1]==0:
@@ -117,8 +117,8 @@ class App:
                 if self.attacker.money > 8:
                     self.attacker.money-=8
                     self.buying=[3,120]
-                    v2, v1, v3 = monster_list[phising]
-                    self.attacker.monsters.append(monster(v1,v2,v3,50,spawnpoint))
+                    v2, v1, v3 = monster_list[trojan]
+                    self.attacker.monsters.append(monster(v1,v2,v3,250,spawnpoint))
             if pyxel.mouse_y < 24 and pyxel.mouse_y > 16 and pyxel.mouse_x < 64:
                 if self.attacker.money > 10:
                     self.attacker.money-=10
@@ -129,7 +129,7 @@ class App:
                 if self.attacker.money > 5:
                     self.attacker.money-=5
                     self.buying=[1,120]
-                    v2, v1, v3 = monster_list[voicephising]
+                    v2, v1, v3 = monster_list[phising]
                     self.attacker.monsters.append(monster(v1,v2,v3,150,spawnpoint))
         
         pyxel.text(66,4,self.defenser.__str__(),3)
@@ -179,10 +179,10 @@ class tower:
                 monst.hp-=self.damage
 
     def draw(self,*args):
-        pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3])
+        pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3],0)
     
     def dist(self,m):
-        return ((self.posx-m.posx)**2+(self.posy-m.posy))**0.5
+        return ((self.posx-m.posx)**2+(self.posy-m.posy)**2)**0.5
 
         
 class Attack:
@@ -210,27 +210,27 @@ class monster:
         match self.turn:
             case 0:
                 self.posy+=1
-                if self.posy==100:
+                if self.posy==112:
                     self.turn+=1
             case 2:
                 self.posy+=1
-                if self.posy==200:
+                if self.posy==208:
                     self.turn+=1
             case 1:
                 self.posx+=1
-                if self.posx==50:
+                if self.posx==64:
                     self.turn+=1
             case 3:
                 self.posx+=1
-                if self.posx==130:
+                if self.posx==136:
                     self.turn+=1
             case 5:
                 self.posx+=1
-                if self.posx==200:
+                if self.posx==208:
                     self.turn+=1
             case 4:
                 self.posy-=1
-                if self.posy==100:
+                if self.posy==128:
                     self.turn+=1
             case 6:
                 self.posy-=1
@@ -241,7 +241,7 @@ class monster:
 
         
     def draw(self,*args):
-        pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3])
+        pyxel.blt(self.posx,self.posy,Image,self.sprite[0],self.sprite[1],self.sprite[2],self.sprite[3],0)
         
 
 App()
