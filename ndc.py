@@ -27,7 +27,7 @@ class App:
     def __init__(self):
         pyxel.init(256, 256, title="Nuit du Code")
         self.buying=[-1,0] # buy nb, time_left
-        pyxel.load("theme2.pyxres")
+        pyxel.load("theme.pyxres")
         pyxel.sounds[0].pcm("assets/audio_bgm1.ogg")
         pyxel.mouse(True)
         self.attacker = Attack()
@@ -40,7 +40,7 @@ class App:
         pyxel.play(0,0, loop=True)
         self.update_Towers()
         self.update_Monsters()
-        self.attacker.money+=0.01
+        self.attacker.money+=0.04
     
     def update_Monsters(self):
         for Monster in self.attacker.monsters:
@@ -118,19 +118,19 @@ class App:
                     self.attacker.money-=8
                     self.buying=[3,120]
                     v2, v1, v3 = monster_list[trojan]
-                    self.attacker.monsters.append(monster(v1,v2,v3,250,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,1250,spawnpoint))
             if pyxel.mouse_y < 24 and pyxel.mouse_y > 16 and pyxel.mouse_x < 64:
                 if self.attacker.money > 10:
                     self.attacker.money-=10
                     self.buying=[2,120]
                     v2, v1, v3 = monster_list[DOS]
-                    self.attacker.monsters.append(monster(v1,v2,v3,100,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,500,spawnpoint))
             if pyxel.mouse_y < 16 and pyxel.mouse_y > 8 and pyxel.mouse_x < 64:
                 if self.attacker.money > 5:
                     self.attacker.money-=5
                     self.buying=[1,120]
                     v2, v1, v3 = monster_list[phising]
-                    self.attacker.monsters.append(monster(v1,v2,v3,150,spawnpoint))
+                    self.attacker.monsters.append(monster(v1,v2,v3,750,spawnpoint))
         
         pyxel.text(66,4,self.defenser.__str__(),3)
         pyxel.text(66,14,self.attacker.__str__(),3)
@@ -155,11 +155,12 @@ class Defense:
         self.hp=16
         self.limit=10
         self.tick=0
-        self.possible_pos=[(40,32),(64,32),(64,64),(128,64),(128,96),(128,128),(146,200),(200,48),(200,64),(200,96)]
+        self.possible_pos=[(24,64+32),(88,160+32),(136,72+32),(15*8,20*8+32),(24*8,80+32),(32,24+32),(64,64+32),(80,128+32),(28*8,6*8+32),(19*8,17*8+32)]
         self.towers=list()
 
     def take_damage(self,dmg):
         self.hp-=dmg
+        self.hp-=1
     
     def __str__(self):
         return f"Enemy Health Point : {self.hp}"
