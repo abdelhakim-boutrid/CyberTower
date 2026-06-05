@@ -16,3 +16,5 @@ class App:
         pyxel.rect(self.x, 0, 8, 8, 9)
 
 App()
+
+#commentaire
