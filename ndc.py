@@ -29,7 +29,6 @@ class App:
         self.buying=[-1,0] # buy nb, time_left
         self.tm=0
         pyxel.load("theme.pyxres")
-        pyxel.sounds[0].pcm("assets/audio_bgm1.ogg")
         pyxel.mouse(True)
         self.attacker = Attack()
         self.defenser = Defense()
