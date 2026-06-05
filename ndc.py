@@ -15,11 +15,11 @@ DOS =12
 trojan= 13
 
 monster_list={#[Name, damage, sprite(posx,posy,sizex,sizey)]
-    firewall:["Firewall",2,(0,16,16,16)],
+    firewall:["Firewall",0.5,(0,16,16,16)],
     ruler:["Rules",1,(32,0,16,16)],
-    phising:["Phising",1,(0,0,16,16)],
-    DOS:["DoS",4,(48,0,16,16)],
-    trojan:["Trojan",2,(0,48,16,16)]
+    phising:["Phising",2,(0,0,16,16)],
+    DOS:["DoS",8,(48,0,16,16)],
+    trojan:["Trojan",4,(0,48,16,16)]
 }
 
 class App:
@@ -27,6 +27,7 @@ class App:
     def __init__(self):
         pyxel.init(256, 256, title="Nuit du Code")
         self.buying=[-1,0] # buy nb, time_left
+        self.tm=0
         pyxel.load("theme.pyxres")
         pyxel.sounds[0].pcm("assets/audio_bgm1.ogg")
         pyxel.mouse(True)
@@ -41,6 +42,8 @@ class App:
         self.update_Towers()
         self.update_Monsters()
         self.attacker.money+=0.04
+        if self.defenser.hp <= 0 :
+            self.tm=1
     
     def update_Monsters(self):
         for Monster in self.attacker.monsters:
@@ -84,13 +87,17 @@ class App:
         if self.defenser.tick == 3000:
             v2,v1,v3 =monster_list[ruler]
             self.defenser.towers.append(tower(v1,v2,v3,self.defenser.possible_pos[6],16))
+
         
 
     def draw(self):
         pyxel.cls(0)
+        pyxel.bltm(0,32,self.tm,0,0,pyxel.width,pyxel.height-32)
+        if tm==1:
+            pyxel.text(64,128,"Thank you For playing!\n(Esc to quit)",8)
+            return
         pyxel.line(0,31,256,31,13)
         pyxel.line(63,0,63,31,13)
-        pyxel.bltm(0,32,tm,0,0,pyxel.width,pyxel.height-32)
         pyxel.text(8,0,"Buy enemies :",1)
         if self.buying[0]==1:
             pyxel.text(8,8,"phishing (5)",2)
@@ -236,7 +243,7 @@ class monster:
             case 6:
                 self.posy-=1
                 if self.posy==50:
-                    defense.take_damage(self.damage)
+                    defense.hp-=self.damage
                     attack.monsters.remove(self)
 
 
