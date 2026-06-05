@@ -19,7 +19,7 @@ monster_list={#[Name, damage, sprite(posx,posy,sizex,sizey)]
     ruler:["Rules",1,(32,0,16,16)],
     phising:["Phising",1,(0,0,16,16)],
     DOS:["DoS",4,(48,0,16,16)],
-    trojan:["Trojan",2,(0,0,16,16)]
+    trojan:["Trojan",2,(0,48,16,16)]
 }
 
 class App:
