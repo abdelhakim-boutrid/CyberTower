@@ -1,0 +1,531 @@
+"""
+Black Hole Survivor - un jeu Pyxel
+==================================
+Pilote un trou noir : avale les corps plus petits que toi pour grossir,
+evite les objets massifs et les etoiles rouges. Survis le plus longtemps possible.
+
+Controles :
+    Fleches / ZQSD / WASD : se deplacer
+    Espace : demarrer
+    R      : recommencer apres un Game Over
+
+Structure :
+    Particle  -> effet visuel d'absorption / explosion
+    Orb       -> objet absorbable (planete / asteroide)
+    Enemy     -> etoile rouge dangereuse
+    PowerUp   -> bonus (gravite / bouclier / slow-mo)
+    BlackHole -> le joueur
+    Game      -> etat global, boucle update/draw
+"""
+
+import math
+import pyxel
+
+# ----------------------------------------------------------------------
+# Constantes globales (faciles a modifier pour equilibrer le jeu)
+# ----------------------------------------------------------------------
+WIDTH, HEIGHT = 256, 256
+FPS = 60
+
+# Etats du jeu
+MENU, PLAYING, GAME_OVER = 0, 1, 2
+
+# Palette : couleurs utilisees pour les objets absorbables
+ORB_COLORS = [12, 11, 10, 14, 6, 3, 1]   # bleu, vert, jaune, rose, gris-bleu...
+ENEMY_COLORS = [8, 9]                     # rouge, orange
+
+# Bonus
+PU_GRAVITY, PU_SHIELD, PU_SLOW = 0, 1, 2
+PU_COLORS = {PU_GRAVITY: 13, PU_SHIELD: 12, PU_SLOW: 10}
+
+# Reglages joueur
+START_RADIUS = 5
+MAX_RADIUS = 30
+START_LIVES = 3
+
+
+# ----------------------------------------------------------------------
+# Particules : petits points qui giclent lors d'une absorption / explosion
+# ----------------------------------------------------------------------
+class Particle:
+    def __init__(self, x, y, col, speed=2.5):
+        ang = pyxel.rndf(0, math.tau)
+        spd = pyxel.rndf(0.4, speed)
+        self.x, self.y = x, y
+        self.vx = math.cos(ang) * spd
+        self.vy = math.sin(ang) * spd
+        self.life = pyxel.rndi(14, 28)
+        self.col = col
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        # friction pour un ralentissement progressif
+        self.vx *= 0.92
+        self.vy *= 0.92
+        self.life -= 1
+
+    @property
+    def dead(self):
+        return self.life <= 0
+
+    def draw(self):
+        pyxel.pset(self.x, self.y, self.col)
+
+
+# ----------------------------------------------------------------------
+# Orbe : objet absorbable. Apparait depuis un bord et derive vers l'interieur.
+# ----------------------------------------------------------------------
+class Orb:
+    def __init__(self, max_radius):
+        self.radius = pyxel.rndf(2, max_radius)
+        self.col = ORB_COLORS[pyxel.rndi(0, len(ORB_COLORS) - 1)]
+        self.points = int(self.radius * 2) + 1
+        self._spawn_from_edge()
+
+    def _spawn_from_edge(self):
+        edge = pyxel.rndi(0, 3)
+        if edge == 0:        # haut
+            self.x, self.y = pyxel.rndf(0, WIDTH), -10
+            self.vx, self.vy = pyxel.rndf(-0.4, 0.4), pyxel.rndf(0.3, 1.0)
+        elif edge == 1:      # bas
+            self.x, self.y = pyxel.rndf(0, WIDTH), HEIGHT + 10
+            self.vx, self.vy = pyxel.rndf(-0.4, 0.4), pyxel.rndf(-1.0, -0.3)
+        elif edge == 2:      # gauche
+            self.x, self.y = -10, pyxel.rndf(0, HEIGHT)
+            self.vx, self.vy = pyxel.rndf(0.3, 1.0), pyxel.rndf(-0.4, 0.4)
+        else:                # droite
+            self.x, self.y = WIDTH + 10, pyxel.rndf(0, HEIGHT)
+            self.vx, self.vy = pyxel.rndf(-1.0, -0.3), pyxel.rndf(-0.4, 0.4)
+
+    def update(self, time_scale, attractor=None, pull=0.0):
+        # attraction du bonus gravite vers le trou noir
+        if attractor and pull > 0:
+            dx, dy = attractor.x - self.x, attractor.y - self.y
+            dist = math.hypot(dx, dy) + 0.001
+            self.vx += (dx / dist) * pull
+            self.vy += (dy / dist) * pull
+        self.x += self.vx * time_scale
+        self.y += self.vy * time_scale
+
+    @property
+    def off_screen(self):
+        m = 24
+        return self.x < -m or self.x > WIDTH + m or self.y < -m or self.y > HEIGHT + m
+
+    def draw(self):
+        r = self.radius
+        pyxel.circ(self.x, self.y, r, self.col)
+        # petit reflet pour donner du volume
+        if r > 3:
+            pyxel.circ(self.x - r * 0.3, self.y - r * 0.3, max(1, r * 0.25), 7)
+
+
+# ----------------------------------------------------------------------
+# Enemy : etoile rouge dangereuse qui traverse l'ecran.
+# ----------------------------------------------------------------------
+class Enemy:
+    def __init__(self, speed_bonus=0.0):
+        self.radius = pyxel.rndf(4, 8)
+        self.col = ENEMY_COLORS[pyxel.rndi(0, 1)]
+        edge = pyxel.rndi(0, 3)
+        base = pyxel.rndf(1.0, 1.8) + speed_bonus
+        if edge == 0:
+            self.x, self.y = pyxel.rndf(0, WIDTH), -10
+            self.vx, self.vy = pyxel.rndf(-0.6, 0.6), base
+        elif edge == 1:
+            self.x, self.y = pyxel.rndf(0, WIDTH), HEIGHT + 10
+            self.vx, self.vy = pyxel.rndf(-0.6, 0.6), -base
+        elif edge == 2:
+            self.x, self.y = -10, pyxel.rndf(0, HEIGHT)
+            self.vx, self.vy = base, pyxel.rndf(-0.6, 0.6)
+        else:
+            self.x, self.y = WIDTH + 10, pyxel.rndf(0, HEIGHT)
+            self.vx, self.vy = -base, pyxel.rndf(-0.6, 0.6)
+
+    def update(self, time_scale):
+        self.x += self.vx * time_scale
+        self.y += self.vy * time_scale
+
+    @property
+    def off_screen(self):
+        m = 24
+        return self.x < -m or self.x > WIDTH + m or self.y < -m or self.y > HEIGHT + m
+
+    def draw(self):
+        r = self.radius
+        # etoile a 4 branches + coeur lumineux pour un look "danger"
+        pyxel.circ(self.x, self.y, r * 0.6, self.col)
+        pyxel.line(self.x - r, self.y, self.x + r, self.y, self.col)
+        pyxel.line(self.x, self.y - r, self.x, self.y + r, self.col)
+        pyxel.circ(self.x, self.y, 1, 7)
+
+
+# ----------------------------------------------------------------------
+# PowerUp : bonus ramassable.
+# ----------------------------------------------------------------------
+class PowerUp:
+    def __init__(self):
+        self.kind = pyxel.rndi(0, 2)
+        self.col = PU_COLORS[self.kind]
+        self.radius = 5
+        self.x = pyxel.rndf(20, WIDTH - 20)
+        self.y = pyxel.rndf(20, HEIGHT - 20)
+        self.life = FPS * 8   # disparait apres 8 secondes
+
+    def update(self):
+        self.life -= 1
+
+    @property
+    def dead(self):
+        return self.life <= 0
+
+    def draw(self):
+        # losange clignotant
+        if self.life % 20 < 14:
+            r = self.radius
+            x, y = self.x, self.y
+            pyxel.tri(x, y - r, x + r, y, x, y + r, self.col)
+            pyxel.tri(x, y - r, x - r, y, x, y + r, self.col)
+            pyxel.circ(x, y, 1, 7)
+
+
+# ----------------------------------------------------------------------
+# BlackHole : le joueur.
+# ----------------------------------------------------------------------
+class BlackHole:
+    def __init__(self):
+        self.x = WIDTH / 2
+        self.y = HEIGHT / 2
+        self.radius = START_RADIUS
+        self.shield = False
+        self.invuln = 0          # frames d'invulnerabilite apres un coup
+
+    @property
+    def speed(self):
+        # plus le trou noir est gros, plus il est lent (equilibrage)
+        return max(1.1, 2.6 - self.radius * 0.04)
+
+    def grow(self, amount):
+        self.radius = min(MAX_RADIUS, self.radius + amount)
+
+    def update(self):
+        s = self.speed
+        if pyxel.btn(pyxel.KEY_LEFT) or pyxel.btn(pyxel.KEY_Q) or pyxel.btn(pyxel.KEY_A):
+            self.x -= s
+        if pyxel.btn(pyxel.KEY_RIGHT) or pyxel.btn(pyxel.KEY_D):
+            self.x += s
+        if pyxel.btn(pyxel.KEY_UP) or pyxel.btn(pyxel.KEY_Z) or pyxel.btn(pyxel.KEY_W):
+            self.y -= s
+        if pyxel.btn(pyxel.KEY_DOWN) or pyxel.btn(pyxel.KEY_S):
+            self.y += s
+        # rester dans l'ecran
+        self.x = max(self.radius, min(WIDTH - self.radius, self.x))
+        self.y = max(self.radius, min(HEIGHT - self.radius, self.y))
+        if self.invuln > 0:
+            self.invuln -= 1
+
+    def draw(self):
+        x, y, r = self.x, self.y, self.radius
+        # halo lumineux anime (pulse)
+        pulse = math.sin(pyxel.frame_count * 0.2) * 1.5
+        pyxel.circb(x, y, r + 4 + pulse, 1)    # halo exterieur bleu fonce
+        pyxel.circ(x, y, r + 2, 13)            # lueur indigo
+        pyxel.circ(x, y, r, 2)                 # anneau violet
+        pyxel.circ(x, y, r - 2, 0)             # coeur noir
+        # anneaux supplementaires quand il grossit (evolution visuelle)
+        if r > 12:
+            pyxel.circb(x, y, r + 6 + pulse, 12)
+        # bouclier
+        if self.shield:
+            pyxel.circb(x, y, r + 7, 7)
+        # clignotement si invulnerable
+        if self.invuln > 0 and self.invuln % 6 < 3:
+            pyxel.circb(x, y, r + 2, 7)
+
+
+# ----------------------------------------------------------------------
+# Game : orchestre tout.
+# ----------------------------------------------------------------------
+class Game:
+    def __init__(self):
+        pyxel.init(WIDTH, HEIGHT, title="Black Hole Survivor", fps=FPS)
+        pyxel.mouse(False)
+        self._init_sounds()
+        self._make_starfield()
+        self.state = MENU
+        self.reset()
+        pyxel.run(self.update, self.draw)
+
+    # --- Sons simples ---
+    def _init_sounds(self):
+        # 0 : absorption  1 : degat  2 : bonus
+        pyxel.sounds[0].set("c3e3g3", "p", "5", "n", 18)
+        pyxel.sounds[1].set("f2c2", "n", "6", "f", 12)
+        pyxel.sounds[2].set("c3e3g3c4", "t", "6", "n", 14)
+
+    # --- Fond etoile statique ---
+    def _make_starfield(self):
+        self.stars = []
+        for _ in range(90):
+            self.stars.append((
+                pyxel.rndi(0, WIDTH),
+                pyxel.rndi(0, HEIGHT),
+                pyxel.rndi(0, 2),                 # phase de scintillement
+                5 if pyxel.rndi(0, 2) else 1,     # couleur (gris ou bleu)
+            ))
+
+    # --- Remise a zero d'une partie ---
+    def reset(self):
+        self.player = BlackHole()
+        self.orbs = []
+        self.enemies = []
+        self.particles = []
+        self.powerups = []
+        self.score = 0
+        self.lives = START_LIVES
+        self.combo = 0
+        self.combo_timer = 0
+        self.orb_timer = 0
+        self.enemy_timer = 0
+        self.pu_timer = FPS * 10
+        self.gravity_timer = 0
+        self.slow_timer = 0
+
+    @property
+    def level(self):
+        return self.score // 250 + 1
+
+    # ==================================================================
+    # UPDATE
+    # ==================================================================
+    def update(self):
+        if pyxel.btnp(pyxel.KEY_Q) and pyxel.btn(pyxel.KEY_CTRL):
+            pyxel.quit()
+
+        if self.state == MENU:
+            if pyxel.btnp(pyxel.KEY_SPACE):
+                self.reset()
+                self.state = PLAYING
+        elif self.state == PLAYING:
+            self._update_play()
+        elif self.state == GAME_OVER:
+            if pyxel.btnp(pyxel.KEY_R):
+                self.reset()
+                self.state = PLAYING
+
+    def _update_play(self):
+        lvl = self.level
+        time_scale = 0.4 if self.slow_timer > 0 else 1.0
+
+        # --- Timers de bonus actifs ---
+        if self.gravity_timer > 0:
+            self.gravity_timer -= 1
+        if self.slow_timer > 0:
+            self.slow_timer -= 1
+
+        # --- Joueur ---
+        self.player.update()
+
+        # --- Spawn d'orbes (frequence croissante avec le niveau) ---
+        self.orb_timer -= 1
+        if self.orb_timer <= 0:
+            max_r = min(self.player.radius + 6, 14)
+            self.orbs.append(Orb(max_r))
+            self.orb_timer = max(15, 45 - lvl * 3)
+
+        # --- Spawn d'ennemis (apparaissent a partir du niveau 1, montent vite) ---
+        self.enemy_timer -= 1
+        if self.enemy_timer <= 0 and lvl >= 1:
+            self.enemies.append(Enemy(speed_bonus=lvl * 0.15))
+            self.enemy_timer = max(40, 130 - lvl * 8)
+
+        # --- Spawn de bonus ---
+        self.pu_timer -= 1
+        if self.pu_timer <= 0:
+            self.powerups.append(PowerUp())
+            self.pu_timer = FPS * pyxel.rndi(8, 14)
+
+        # --- Combo : se reinitialise si on n'absorbe plus rien ---
+        if self.combo_timer > 0:
+            self.combo_timer -= 1
+        else:
+            self.combo = 0
+
+        attractor = self.player if self.gravity_timer > 0 else None
+        pull = 0.25 if self.gravity_timer > 0 else 0.0
+
+        # --- Mise a jour + collisions des orbes ---
+        for orb in self.orbs[:]:
+            orb.update(time_scale, attractor, pull)
+            if self._collide(self.player, orb):
+                if self.player.radius > orb.radius:
+                    self._absorb_orb(orb)
+                else:
+                    self._take_damage(orb.x, orb.y)
+                    self.orbs.remove(orb)
+            elif orb.off_screen:
+                self.orbs.remove(orb)
+
+        # --- Mise a jour + collisions des ennemis ---
+        for en in self.enemies[:]:
+            en.update(time_scale)
+            if self._collide(self.player, en):
+                # absorbable seulement si le trou noir est nettement plus gros
+                if self.player.radius >= en.radius * 2.2:
+                    self.score += 50
+                    self.player.grow(0.5)
+                    self._burst(en.x, en.y, en.col, 14)
+                    pyxel.play(0, 0)
+                    self.enemies.remove(en)
+                else:
+                    self._take_damage(en.x, en.y)
+                    self.enemies.remove(en)
+            elif en.off_screen:
+                self.enemies.remove(en)
+
+        # --- Bonus ramasses ---
+        for pu in self.powerups[:]:
+            pu.update()
+            if self._collide(self.player, pu):
+                self._apply_powerup(pu)
+                self.powerups.remove(pu)
+            elif pu.dead:
+                self.powerups.remove(pu)
+
+        # --- Particules ---
+        for p in self.particles[:]:
+            p.update()
+            if p.dead:
+                self.particles.remove(p)
+
+    # --- Collision cercle-cercle ---
+    def _collide(self, a, b):
+        return math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius
+
+    def _absorb_orb(self, orb):
+        # combo : bonus de points si absorptions rapprochees
+        self.combo += 1
+        self.combo_timer = FPS  # 1 seconde pour enchainer
+        mult = 1 + self.combo // 3
+        self.score += orb.points * mult
+        self.player.grow(orb.radius * 0.06)
+        self._burst(orb.x, orb.y, orb.col, int(orb.radius) + 6)
+        pyxel.play(0, 0)
+        self.orbs.remove(orb)
+
+    def _take_damage(self, x, y):
+        if self.player.invuln > 0:
+            return
+        if self.player.shield:
+            self.player.shield = False
+            self.player.invuln = FPS // 2
+            self._burst(x, y, 7, 16)
+            pyxel.play(1, 1)
+            return
+        self.lives -= 1
+        self.player.invuln = FPS       # 1 seconde d'invulnerabilite
+        self.player.radius = max(START_RADIUS, self.player.radius - 2)
+        self.combo = 0
+        self._burst(self.player.x, self.player.y, 8, 20)
+        pyxel.play(1, 1)
+        if self.lives <= 0:
+            self.state = GAME_OVER
+
+    def _apply_powerup(self, pu):
+        pyxel.play(2, 2)
+        self._burst(pu.x, pu.y, pu.col, 12)
+        if pu.kind == PU_GRAVITY:
+            self.gravity_timer = FPS * 5
+        elif pu.kind == PU_SHIELD:
+            self.player.shield = True
+        elif pu.kind == PU_SLOW:
+            self.slow_timer = FPS * 4
+
+    def _burst(self, x, y, col, n):
+        for _ in range(n):
+            self.particles.append(Particle(x, y, col))
+
+    # ==================================================================
+    # DRAW
+    # ==================================================================
+    def draw(self):
+        pyxel.cls(0)
+        self._draw_stars()
+        if self.state == MENU:
+            self._draw_menu()
+        elif self.state == PLAYING:
+            self._draw_play()
+        elif self.state == GAME_OVER:
+            self._draw_play()       # garde le decor fige derriere
+            self._draw_gameover()
+
+    def _draw_stars(self):
+        for (x, y, phase, col) in self.stars:
+            if (pyxel.frame_count // 12 + phase) % 4 != 0:
+                pyxel.pset(x, y, col)
+
+    def _draw_play(self):
+        for orb in self.orbs:
+            orb.draw()
+        for pu in self.powerups:
+            pu.draw()
+        for en in self.enemies:
+            en.draw()
+        for p in self.particles:
+            p.draw()
+        self.player.draw()
+        self._draw_hud()
+
+    def _draw_hud(self):
+        pyxel.text(4, 4, f"SCORE {self.score}", 7)
+        pyxel.text(4, 12, f"NIVEAU {self.level}", 10)
+        # vies (petits cercles)
+        for i in range(self.lives):
+            pyxel.circ(WIDTH - 8 - i * 9, 7, 3, 2)
+            pyxel.circ(WIDTH - 8 - i * 9, 7, 1, 0)
+        # combo
+        if self.combo >= 3:
+            pyxel.text(WIDTH // 2 - 16, 4, f"COMBO x{1 + self.combo // 3}", 14)
+        # indicateurs de bonus actifs
+        y = 22
+        if self.player.shield:
+            pyxel.text(4, y, "BOUCLIER", 12); y += 8
+        if self.gravity_timer > 0:
+            pyxel.text(4, y, "GRAVITE", 13); y += 8
+        if self.slow_timer > 0:
+            pyxel.text(4, y, "SLOW-MO", 10)
+
+    def _draw_menu(self):
+        # gros trou noir decoratif
+        cx, cy = WIDTH // 2, HEIGHT // 2 - 10
+        pulse = math.sin(pyxel.frame_count * 0.1) * 2
+        pyxel.circ(cx, cy, 24 + pulse, 1)
+        pyxel.circ(cx, cy, 20, 13)
+        pyxel.circ(cx, cy, 16, 2)
+        pyxel.circ(cx, cy, 12, 0)
+
+        self._center_text(50, "BLACK HOLE SURVIVOR", 7)
+        self._center_text(60, "absorbe . grossis . survis", 13)
+        if pyxel.frame_count % 40 < 26:
+            self._center_text(180, "ESPACE pour jouer", 10)
+        self._center_text(200, "Fleches / ZQSD : se deplacer", 5)
+        self._center_text(210, "R : recommencer", 5)
+
+    def _draw_gameover(self):
+        # voile sombre
+        for y in range(HEIGHT):
+            if y % 2 == 0:
+                pyxel.line(0, y, WIDTH, y, 0)
+        self._center_text(90, "GAME OVER", 8)
+        self._center_text(110, f"SCORE FINAL : {self.score}", 7)
+        self._center_text(120, f"NIVEAU ATTEINT : {self.level}", 10)
+        if pyxel.frame_count % 40 < 26:
+            self._center_text(160, "Appuie sur R pour rejouer", 13)
+
+    def _center_text(self, y, s, col):
+        x = WIDTH // 2 - len(s) * 2
+        pyxel.text(x, y, s, col)
+
+
+Game()
